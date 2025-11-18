@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useGetSeatsByConcert, useLockSeats, useUnlockSeats } from "@/hooks/useSeat";
 import { useParams, useRouter } from "next/navigation";
@@ -75,55 +75,53 @@ const SeatSelectionPage = () => {
   };
 
 
+  const handleSeatUpdate = useCallback((data: any) => {
+    console.log("📡 Real-time seat update received:", data);
+
+    // Refresh seats after update — but debounce UI refresh
+    queryClient.invalidateQueries({ queryKey: ["seats", concertId] });
+
+    if (!selectedSeats.length) return;
+
+    const updatedIds = data.seats.map((s: any) => s._id);
+
+    if (data.type === "UNLOCKED") {
+      const ourUnlocked = selectedSeats.some(
+        (s) => updatedIds.includes(s._id) && s.lockedBy === userId
+      );
+      if (ourUnlocked) resetSeats();
+    }
+
+    if (data.type === "BOOKED") {
+      const remainingSeats = selectedSeats.filter(
+        (s) => !updatedIds.includes(s._id)
+      );
+
+      if (remainingSeats.length !== selectedSeats.length) {
+        setSelectedSeats(remainingSeats);
+        const total = remainingSeats.reduce((sum, s) => sum + s.price, 0);
+        setTotalAmount(total);
+      }
+    }
+  }, [selectedSeats, userId, concertId, queryClient, resetSeats, setSelectedSeats, setTotalAmount]);
+
+
+
   // Real-time seat updates via WebSocket
   useSocket({
     concertId: concertId as string,
     enabled: !!concertId,
-    onSeatUpdate: (data) => {
-      console.log('📡 Real-time seat update received:', data);
-
-      // Invalidate and refetch seats to get latest status
-      queryClient.invalidateQueries({ queryKey: ['seats', concertId] });
-
-      // If seats were unlocked and we had them selected, update our state
-      if (data.type === 'UNLOCKED' && selectedSeats.length > 0) {
-        const unlockedSeatIds = data.seats.map(s => s._id);
-        const ourUnlockedSeats = selectedSeats.filter(s =>
-          unlockedSeatIds.includes(s._id) && s.lockedBy === userId
-        );
-
-        if (ourUnlockedSeats.length > 0) {
-          // If our locked seats were unlocked by someone else or expired, reset
-          resetSeats();
-        }
-      }
-
-      // If seats were booked, remove them from our selection if we had them
-      if (data.type === 'BOOKED' && selectedSeats.length > 0) {
-        const bookedSeatIds = data.seats.map(s => s._id);
-        const ourBookedSeats = selectedSeats.filter(s => bookedSeatIds.includes(s._id));
-
-        if (ourBookedSeats.length > 0) {
-          // Remove booked seats from selection
-          const remainingSeats = selectedSeats.filter(s => !bookedSeatIds.includes(s._id));
-          setSelectedSeats(remainingSeats);
-          const newTotal = remainingSeats.reduce((sum, s) => sum + s.price, 0);
-          setTotalAmount(newTotal);
-        }
-      }
-    },
+    onSeatUpdate: handleSeatUpdate
   });
 
-  // ========== ALL useEffect HOOKS (must be before any conditional returns) ==========
-  
+
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (isInitialized && !isAuthenticated && typeof window !== 'undefined') {
       router.push("/register");
     }
   }, [isInitialized, isAuthenticated, router]);
-
-
 
 
 
@@ -212,7 +210,7 @@ const SeatSelectionPage = () => {
     return () => clearInterval(countdownInterval);
   }, [locked, timer, handleUnlockSeats, setTimer]);
 
-  // Periodically sync timer with backend to handle page refresh and ensure accuracy
+
   useEffect(() => {
     if (!locked || !userId || !seats.length) return;
 
@@ -255,43 +253,8 @@ const SeatSelectionPage = () => {
     return () => clearInterval(syncInterval);
   }, [locked, userId, seats, timer, setTimer, resetSeats]);
 
-  // ========== CONDITIONAL RETURNS (after all hooks) ==========
-  
-  // Show loading while checking authentication
-  if (!isInitialized) {
-    return <Loading />;
-  }
 
-  // Show auth required message if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="max-w-md w-full mx-4">
-          <CardContent className="p-8 text-center">
-            <Lock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Authentication Required</h2>
-            <p className="text-gray-600 mb-6">
-              Please sign in or create an account to view and select seats.
-            </p>
-            <div className="flex gap-4 justify-center">
-              <Link href="/register">
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  Sign Up
-                </Button>
-              </Link>
-              <Link href="/login">
-                <Button variant="outline">
-                  Sign In
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (isLoading) return <Loading />;
+  if (isLoading || !isInitialized) return <Loading />;
 
   return (
     <div className="flex flex-col min-h-screen p-6 gap-6 bg-gray-50">
