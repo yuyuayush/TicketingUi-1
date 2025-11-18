@@ -228,8 +228,8 @@ export interface ISeat {
   seatNumber: string;
   row: string;
   column: number;
-  seatType: 'gold' | 'silver' | 'platinum';
-  status: 'AVAILABLE' | 'RESERVED';
+  seatType: "gold" | "silver" | "platinum";
+  status: "AVAILABLE" | "RESERVED" | "BOOKED";
   price: number;
   lockedBy?: string | null; // User ID if locked
   booking?: string; // Booking ID if booked

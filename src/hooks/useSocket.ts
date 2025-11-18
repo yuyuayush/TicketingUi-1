@@ -4,10 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { getSocket, initSocket, disconnectSocket, joinConcertRoom, leaveConcertRoom } from "@/lib/socket";
 import { Socket } from "socket.io-client";
 import { useAuthStore } from "@/store/useAuth";
+import type { ISeat } from "@/lib/types";
+
+interface SeatUpdateEvent {
+  type: "LOCKED" | "UNLOCKED" | "BOOKED";
+  seats: Array<{ _id: string; status: ISeat["status"]; lockedBy?: string | null }>;
+}
 
 interface UseSocketOptions {
   concertId?: string;
-  onSeatUpdate?: (data: { seats: Array<{ _id: string; status: string; lockedBy?: string | null }> }) => void;
+  onSeatUpdate?: (data: SeatUpdateEvent) => void;
   enabled?: boolean;
 }
 
