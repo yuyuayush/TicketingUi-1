@@ -106,7 +106,6 @@ const SeatSelectionPage = () => {
   }, [selectedSeats, userId, concertId, queryClient, resetSeats, setSelectedSeats, setTotalAmount]);
 
 
-
   // Real-time seat updates via WebSocket
   useSocket({
     concertId: concertId as string,

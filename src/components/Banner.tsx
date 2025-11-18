@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import SearchBar from "./Searchbar";
+import SearchBar from "./SearchBar";
 
 const images = [
   "/image1.jpg",
