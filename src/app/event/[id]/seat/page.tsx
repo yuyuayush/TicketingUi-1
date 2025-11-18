@@ -10,7 +10,7 @@ import { getSeatColor, items } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuth";
 import { SeatButtonProps, SeatMapProps, ISeat } from "@/lib/types";
 import BookingPanel from "@/components/seat/BookingPanel";
-import InteractiveSeatMap from "@/components/seat/InteractiveSeatMap";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Theater, Circle, Lock } from "lucide-react";
 import { useSocket } from "@/hooks/useSocket";
@@ -350,6 +350,11 @@ const SeatSelectionPage = () => {
 
 export default SeatSelectionPage;
 
+
+const InteractiveSeatMap = dynamic(
+  () => import("@/components/seat/InteractiveSeatMap"),
+  { ssr: false, loading: () => <div className="h-full w-full bg-gray-200 animate-pulse" /> }
+);
 
 const SeatButton: React.FC<SeatButtonProps> = ({ seat, toggleSeat, selectedSeats, locked }) => {
   const isDisabled =

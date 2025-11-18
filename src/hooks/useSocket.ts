@@ -25,39 +25,41 @@ export const useSocket = (options: UseSocketOptions = {}) => {
       return;
     }
 
-    // Initialize socket
     const socket = initSocket();
     socketRef.current = socket;
 
-    // Connection status handlers
-    socket.on("connect", () => {
+    const handleConnect = () => {
       setIsConnected(true);
       console.log("✅ Socket connected");
-    });
 
-    socket.on("disconnect", () => {
+      if (concertId) {
+        joinConcertRoom(concertId);
+      }
+    };
+
+    const handleDisconnect = () => {
       setIsConnected(false);
-      console.log("❌ Socket disconnected");
-    });
+      console.log("Socket disconnected");
+    };
 
-    // Join concert room if concertId is provided
-    if (concertId) {
-      joinConcertRoom(concertId);
-    }
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
 
-    // Listen for seat updates
     if (onSeatUpdate && concertId) {
-      socket.on('seatUpdate', onSeatUpdate);
+      socket.on("seatUpdate", onSeatUpdate);
       console.log(`👂 Listening for seat updates on: concert-${concertId}`);
     }
 
-    // Cleanup
     return () => {
-      if (socket && concertId) {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+
+      if (concertId) {
         leaveConcertRoom(concertId);
-        if (onSeatUpdate) {
-          socket.off('seatUpdate', onSeatUpdate);
-        }
+      }
+
+      if (onSeatUpdate) {
+        socket.off("seatUpdate", onSeatUpdate);
       }
     };
   }, [enabled, isAuthenticated, concertId, onSeatUpdate]);
