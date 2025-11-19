@@ -6,9 +6,6 @@ import { getConcertImageUrl } from "@/lib/imageUtils";
 
 export default function Ticket({ ticket }: { ticket: any }) {
   if (!ticket) {
-
-
-    
     return (
       <div className="min-h-[200px] flex items-center justify-center">
         <p className="text-gray-500">Ticket data not found</p>

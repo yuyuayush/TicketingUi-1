@@ -16,6 +16,7 @@ import { Theater, Circle, Lock } from "lucide-react";
 import { useSocket } from "@/hooks/useSocket";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import SeatViewer from "@/components/seat/SeatMap";
 
 
 
@@ -306,6 +307,8 @@ const SeatSelectionPage = () => {
           handleUnlockSeats={handleUnlockSeats}
         />
       </div>
+
+      <SeatViewer/>
     </div>
   );
 };
