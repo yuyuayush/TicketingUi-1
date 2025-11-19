@@ -1,484 +1,287 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useForm, Controller, FieldValues, UseFormRegister, UseFormSetValue } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-
 import { GenericDialog } from "@/components/common/GenericDialog";
 import { ApiDropdown } from "@/components/ui/ApiDropdown";
 import { useGetTheaters } from "@/hooks/useTheater";
 import { Input, Switch, Button } from "@/components/ui";
-import { ConcertDialogProps, IConcertFormData } from "@/lib/types";
+import { ConcertDialogProps } from "@/lib/types";
 import { Label } from "@/components/ui/label";
+import * as z from "zod";
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-
-export const concertSchema = z
-    .object({
-        title: z.string().min(3, "Title must be at least 3 characters."),
-        artist: z.string().min(3, "Artist name must be at least 3 characters."),
-        theaterId: z.string().min(1, "Theater location is required."),
-        genre: z.string().min(1, "Genre is required."),
-
-        startTime: z.string().min(1, "Start time is required."),
-        endTime: z.string().min(1, "End time is required."),
-
-        basePrice: z.preprocess(
-            (v) => (v === "" ? 0 : Number(v)),
-            z.number().min(0, "Base price must be 0 or greater.")
-        ),
-
-        totalTickets: z.preprocess(
-            (v) => (v === "" ? 1 : Number(v)),
-            z.number().int().min(1, "Total tickets must be at least 1.")
-        ),
-
-        description: z
-            .string()
-            .max(5000, "Description cannot exceed 5000 characters.")
-            .optional()
-            .or(z.literal("")),
-
-        isPublished: z.boolean().default(false),
-
-        // --- Image URL ---
-        imageUrl: z
-            .string()
-            .url("Must be a valid URL.")
-            .optional()
-            .or(z.literal("")),
-
-        image: z
-            .any()
-            .optional()
-            .refine(
-                (file) => {
-                    if (!file) return true; // No file → OK
-                    if (!(file instanceof File)) return false;
-                    return file.size <= MAX_FILE_SIZE; // Fixed: should be <= not >=
-                },
-                { message: "Max file size is 5MB." }
-            ),
-    }).refine(
-        (data) =>
-            !data.startTime ||
-            !data.endTime ||
-            new Date(data.endTime) > new Date(data.startTime),
-        {
-            message: "End time must be after start time.",
-            path: ["endTime"],
-        }
-    ).refine((data) => !(data.image && data.imageUrl), {
-        message: "You cannot provide both an image file and an image URL.",
-        path: ["imageUrl"],
-    });
-
-export type ConcertFormType = z.infer<typeof concertSchema>;
-
-
+// Zod schema for manual validation (optional)
+const concertSchema = z.object({
+    title: z.string().min(3),
+    artist: z.string().min(3),
+    theaterId: z.string().min(1),
+    genre: z.string().min(1),
+    startTime: z.string().min(1),
+    endTime: z.string().min(1),
+    basePrice: z.number().min(0),
+    totalTickets: z.number().min(1),
+    description: z.string().optional(),
+    isPublished: z.boolean(),
+    image: z.any().optional(),
+});
 
 export function ConcertDialog({
     open,
     setOpen,
-    formData: initialFormData,
+    formData: initial,
     editConcert,
     handleSave,
     isPending,
 }: ConcertDialogProps) {
     const { data: theaters = [], isLoading: isLoadingTheaters } = useGetTheaters();
-    const availableGenres = ['Pop', 'Rock', 'Classical', 'Jazz', 'Electronic', 'Hip Hop', 'Other'];
 
-    // Utility function to format Date object for datetime-local input
-    const formatForDateTimeLocal = useCallback((dateString?: string): string => {
-        if (!dateString) return "";
-        try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return "";
+    const genreList = [
+        "Pop",
+        "Rock",
+        "Classical",
+        "Jazz",
+        "Electronic",
+        "Hip Hop",
+        "Other",
+    ];
 
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hour = String(date.getHours()).padStart(2, '0');
-            const minute = String(date.getMinutes()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hour}:${minute}`;
-
-        } catch (e) {
-            return "";
-        }
+    const formatDT = useCallback((d?: string) => {
+        if (!d) return "";
+        const date = new Date(d);
+        return [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, "0"),
+            String(date.getDate()).padStart(2, "0"),
+        ].join("-") +
+            "T" +
+            [String(date.getHours()).padStart(2, "0"), String(date.getMinutes()).padStart(2, "0")].join(":");
     }, []);
 
+    // --------------------
+    // STATE (Controlled Fields)
+    // --------------------
+    const [title, setTitle] = useState("");
+    const [artist, setArtist] = useState("");
+    const [theaterId, setTheaterId] = useState("");
+    const [genre, setGenre] = useState("");
+    const [startTime, setStartTime] = useState("");
+    const [endTime, setEndTime] = useState("");
+    const [basePrice, setBasePrice] = useState(0);
+    const [totalTickets, setTotalTickets] = useState(1);
+    const [description, setDescription] = useState("");
+    const [isPublished, setIsPublished] = useState(false);
 
-    type ConcertFormType = z.infer<typeof concertSchema>;
-
-
-    const {
-        control,
-        register,
-        handleSubmit,
-        watch,
-        setValue,
-        formState: { errors }
-    } = useForm<ConcertFormType>({
-        resolver: zodResolver(concertSchema),
-        defaultValues: initialFormData || {}
-    });
-
-    const watchedImageFile = watch("image");
-    const watchedImageUrl = watch("imageUrl");
-
+    const [image, setImage] = useState<File | string | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-    // Image Preview Effect
+    // --------------------
+    // LOAD EDIT DATA
+    // --------------------
     useEffect(() => {
-        if (watchedImageFile instanceof File) {
+        if (!initial) return;
+
+        setTitle(initial.title || "");
+        setArtist(initial.artist || "");
+        setTheaterId(initial.theaterId || "");
+        setGenre(initial.genre || "");
+        setStartTime(formatDT(initial.startTime));
+        setEndTime(formatDT(initial.endTime));
+
+        setBasePrice(initial.basePrice ?? 0);
+        setTotalTickets(initial.totalTickets ?? 1);
+        setDescription(initial.description || "");
+        setIsPublished(initial.isPublished ?? false);
+
+        if (typeof initial.image === "string") {
+            setImage(initial.image);
+            setImagePreview(initial.image);
+        } else {
+            setImage(null);
+            setImagePreview(null);
+        }
+    }, [initial, formatDT]);
+
+    // --------------------
+    // IMAGE HANDLING
+    // --------------------
+    const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] ?? null;
+
+        if (file && file.size > MAX_FILE_SIZE) {
+            alert("Image cannot exceed 5MB");
+            return;
+        }
+
+        if (file) {
             const reader = new FileReader();
             reader.onloadend = () => setImagePreview(reader.result as string);
-            reader.readAsDataURL(watchedImageFile);
-        } else if (watchedImageUrl) {
-            setImagePreview(watchedImageUrl);
+            // setImage(reader.result as string);
+            reader.readAsDataURL(file);
         } else {
             setImagePreview(null);
         }
-    }, [watchedImageFile, watchedImageUrl]);
-
-    // Submission handler
-    const handleDialogSave = handleSubmit(async (data) => {
-        console.log(data);
-        handleSave(data);
-    });
-
-    const handleRemoveImage = () => {
-        setValue("image", null, { shouldValidate: true });
-        setValue("imageUrl", "", { shouldValidate: true });
     };
 
+    const removeImage = () => {
+        setImage(null);
+        setImagePreview(null);
+    };
 
+    // --------------------
+    // SAVE HANDLER
+    // --------------------
+    const save = () => {
+        const payload = {
+            title,
+            artist,
+            theaterId,
+            genre,
+            startTime,
+            endTime,
+            basePrice,
+            totalTickets,
+            description,
+            isPublished,
+            image:imagePreview,
+        };
+
+        handleSave(payload);
+    };
+
+    // --------------------
+    // UI
+    // --------------------
     return (
         <GenericDialog
-            onSave={handleDialogSave}
             open={open}
             setOpen={setOpen}
             title={editConcert ? "Edit Concert" : "Schedule New Concert"}
+            onSave={save}
             isPending={isPending}
             saveButtonText={editConcert ? "Update Concert" : "Create Concert"}
-            className="max-w-5xl "
+            className="max-w-5xl"
         >
-            {/* Bind the form submission to RHF's handleSubmit */}
-            <form onSubmit={handleDialogSave} className="w-full">
-                {/* Scrollable Container */}
-                <div className="px-2 max-h-[70vh] overflow-y-auto">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="px-2 max-h-[70vh] overflow-y-auto">
 
-                        {/* Left Column: Core Details */}
-                        <div className="flex flex-col gap-4">
-                            <TitleInput register={register} error={errors.title?.message} />
-                            <ArtistInput register={register} error={errors.artist?.message} />
+                {/* GRID */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-                            <TheaterDropdown
-                                control={control}
-                                theaters={theaters}
-                                isLoading={isLoadingTheaters}
-                                error={errors.theaterId?.message}
-                            />
+                    {/* LEFT */}
+                    <div className="flex flex-col gap-4">
 
-                            <GenreDropdown
-                                control={control}
-                                genres={availableGenres}
-                                error={errors.genre?.message}
-                            />
-
-                            <DateTimeInputs
-                                register={register}
-                                errors={errors}
-                            />
-
-                            <TotalTicketsInput register={register} error={errors.totalTickets?.message} />
+                        {/* TITLE */}
+                        <div>
+                            <Label>Title</Label>
+                            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
                         </div>
 
-                        {/* Right Column: Financial, Image & Status */}
-                        <div className="flex flex-col gap-4">
-                            <BasePriceInput register={register} error={errors.basePrice?.message} />
+                        {/* ARTIST */}
+                        <div>
+                            <Label>Artist / Band</Label>
+                            <Input value={artist} onChange={(e) => setArtist(e.target.value)} />
+                        </div>
 
-                            <ImageUpload
-                                register={register}
-                                setValue={setValue as UseFormSetValue<IConcertFormData>} // Pass setValue
-                                imageUrl={watchedImageUrl}
-                                imagePreview={imagePreview}
-                                // Display errors for both imageUrl (URL) and image (File)
-                                error={errors.imageUrl?.message || errors.image?.message}
-                                removeImage={handleRemoveImage}
-
+                        {/* THEATER */}
+                        <div>
+                            <Label>Theater</Label>
+                            <ApiDropdown
+                                data={theaters}
+                                isLoading={isLoadingTheaters}
+                                value={theaterId}
+                                onChange={setTheaterId}
+                                getLabel={(t) => `${t.name} (${t.city?.name || ""})`}
+                                getValue={(t) => t._id}
                             />
+                        </div>
 
-                            <DescriptionInput register={register} error={errors.description?.message} />
+                        {/* GENRE */}
+                        <div>
+                            <Label>Genre</Label>
+                            <ApiDropdown
+                                data={genreList.map((g) => ({ name: g, _id: g }))}
+                                value={genre}
+                                onChange={setGenre}
+                                getLabel={(i) => i.name}
+                                getValue={(i) => i._id}
+                            />
+                        </div>
 
-                            <PublishedSwitch control={control} />
+                        {/* DATES */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Start Time</Label>
+                                <Input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                            </div>
+                            <div>
+                                <Label>End Time</Label>
+                                <Input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                            </div>
+                        </div>
+
+                        {/* TICKETS */}
+                        <div>
+                            <Label>Total Tickets</Label>
+                            <Input
+                                type="number"
+                                min={1}
+                                value={totalTickets}
+                                onChange={(e) => setTotalTickets(Number(e.target.value))}
+                            />
                         </div>
                     </div>
-                    {/* Display form errors */}
-                    {Object.keys(errors).length > 0 && (
-                        <p className="text-red-500 text-sm mt-4">
-                            Please correct the errors above before saving.
-                        </p>
-                    )}
+
+                    {/* RIGHT */}
+                    <div className="flex flex-col gap-4">
+
+                        {/* PRICE */}
+                        <div>
+                            <Label>Base Price</Label>
+                            <Input
+                                type="number"
+                                min={0}
+                                value={basePrice}
+                                onChange={(e) => setBasePrice(Number(e.target.value))}
+                            />
+                        </div>
+
+                        {/* IMAGE UPLOAD */}
+                        <div className="border p-3 rounded-md">
+                            <Label>Concert Image</Label>
+                            <p className="text-xs text-gray-500">Max 5MB</p>
+
+                            <input type="file" accept="image/*" onChange={onImageChange} className="mt-2" />
+
+                            {imagePreview && (
+                                <div className="mt-4">
+                                    <img src={imagePreview} className="h-40 w-full object-cover rounded-md border" />
+                                    <Button variant="destructive" className="mt-2" onClick={removeImage}>
+                                        Remove Image
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* DESCRIPTION */}
+                        <div>
+                            <Label>Description</Label>
+                            <textarea
+                                className="border p-2 rounded w-full resize-none"
+                                rows={3}
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                            />
+                        </div>
+
+                        {/* PUBLISH */}
+                        <div className="flex items-center justify-between mt-4">
+                            <Label>Published (Visible to users)</Label>
+                            <Switch checked={isPublished} onCheckedChange={setIsPublished} />
+                        </div>
+                    </div>
                 </div>
-                {/* Hidden submit button to allow form submission via Enter key if needed */}
-                <button type="submit" hidden />
-            </form>
+
+            </div>
         </GenericDialog>
-    );
-}
-
-// ========================================================
-// 3. Subcomponents (RHF Refactored)
-// ========================================================
-
-interface RHFInputProps {
-    label: string;
-    name: keyof IConcertFormData;
-    register: UseFormRegister<IConcertFormData>; // Strong typing for register
-    error?: string;
-    type?: string;
-    min?: number;
-}
-
-export const RHFInput: React.FC<RHFInputProps> = ({
-    label,
-    name,
-    register,
-    error,
-    type = "text",
-    min
-}) => {
-    return (
-        <div className="flex flex-col space-y-1">
-            <Label htmlFor={name} className="text-sm font-medium">
-                {label}
-            </Label>
-
-            <Input
-                id={name}
-                type={type}
-                min={min}
-                {...register(name, {
-                    ...(type === "number" ? { valueAsNumber: true } : {})
-                })}
-                className={error ? "border-red-500" : ""}
-                placeholder={label}
-            />
-
-            {error && <p className="text-xs text-red-500">{error}</p>}
-        </div>
-    );
-};
-
-function TitleInput({ register, error }: { register: UseFormRegister<IConcertFormData>; error?: string }) {
-    return <RHFInput register={register} error={error} label="Title" name="title" />;
-}
-
-function ArtistInput({ register, error }: { register: UseFormRegister<IConcertFormData>; error?: string }) {
-    return <RHFInput register={register} error={error} label="Artist / Band" name="artist" />;
-}
-
-function BasePriceInput({ register, error }: { register: UseFormRegister<IConcertFormData>; error?: string }) {
-    return <RHFInput register={register} error={error} label="Base Price ($)" name="basePrice" type="number" min={0} />;
-}
-
-function TotalTicketsInput({ register, error }: { register: UseFormRegister<IConcertFormData>; error?: string }) {
-    return <RHFInput register={register} error={error} label="Total Tickets" name="totalTickets" type="number" min={1} />;
-}
-
-function DescriptionInput({ register, error }: { register: UseFormRegister<IConcertFormData>; error?: string }) {
-    return (
-        <div className="flex flex-col ">
-            <Label className="text-sm font-medium" htmlFor="description">Description</Label>
-            <textarea
-                {...register("description")}
-                placeholder="Concert Description (max 5000 chars)"
-                rows={3}
-                id="description"
-                className={`w-full p-2 border rounded-md resize-none text-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors ${error ? "border-red-500" : ""}`}
-            />
-            {error && <p className="text-xs text-red-500">{error}</p>}
-        </div>
-    );
-}
-
-function TheaterDropdown({ control, theaters, isLoading, error }: { control: any; theaters: any[]; isLoading: boolean; error?: string }) {
-    return (
-        <Controller
-            name="theaterId"
-            control={control}
-            render={({ field }) => (
-                <div className="flex flex-col space-y-1">
-                    <Label className="text-sm font-medium">Theater Location</Label>
-                    <ApiDropdown
-                        placeholder="Select Venue"
-                        value={field.value || ""}
-                        onChange={field.onChange}
-                        data={theaters}
-                        isLoading={isLoading}
-                        getLabel={(theater: any) => `${theater.name} ${theater.city ? `(${theater.city.name})` : ''}`}
-                        getValue={(theater: any) => theater._id}
-                        className={error ? "border-red-500" : ""}
-                    />
-                    {error && <p className="text-xs text-red-500">{error}</p>}
-                </div>
-            )}
-        />
-    );
-}
-
-function GenreDropdown({ control, genres, error }: { control: any; genres: string[]; error?: string }) {
-    return (
-        <Controller
-            name="genre"
-            control={control}
-            render={({ field }) => (
-                <div className="flex flex-col space-y-1">
-                    <Label className="text-sm font-medium">Genre</Label>
-                    <ApiDropdown
-                        placeholder="Select Genre"
-                        value={field.value || ""}
-                        onChange={field.onChange}
-                        data={genres.map((g) => ({ name: g, _id: g }))}
-                        isLoading={false}
-                        getLabel={(item: any) => item.name}
-                        getValue={(item: any) => item._id}
-                        className={error ? "border-red-500" : ""}
-                    />
-                    {error && <p className="text-xs text-red-500">{error}</p>}
-                </div>
-            )}
-        />
-    );
-}
-
-function DateTimeInputs({ register, errors }: { register: UseFormRegister<IConcertFormData>; errors: FieldValues }) {
-    return (
-        <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col space-y-1">
-                <Label className="text-sm font-medium" htmlFor="startTime">Start Time</Label>
-                <Input
-                    type="datetime-local"
-                    {...register("startTime")}
-                    id="startTime"
-                    className={errors.startTime ? "border-red-500" : ""}
-                />
-                {errors.startTime && <p className="text-xs text-red-500">{errors.startTime.message as string}</p>}
-            </div>
-            <div className="flex flex-col space-y-1">
-                <Label className="text-sm font-medium" htmlFor="endTime">End Time</Label>
-                <Input
-                    type="datetime-local"
-                    {...register("endTime")}
-                    id="endTime"
-                    className={errors.endTime ? "border-red-500" : ""}
-                />
-                {errors.endTime && <p className="text-xs text-red-500">{errors.endTime.message as string}</p>}
-            </div>
-        </div>
-    );
-}
-
-function ImageUpload({
-    register,
-    setValue, // Passed from parent
-    imageUrl,
-    imagePreview,
-    error,
-    removeImage,
-}: {
-    register: UseFormRegister<IConcertFormData>;
-    setValue: UseFormSetValue<IConcertFormData>; // New prop type
-    imageUrl?: string | null;
-    imagePreview: string | null;
-    error?: string;
-    removeImage: () => void;
-}) {
-
-    // Handler for file input change
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0] ?? null;
-        // 1. Clear URL, set file
-        setValue("imageUrl", "", { shouldValidate: true });
-        setValue("image", file, { shouldValidate: true });
-        // The image input is registered, but we control the value via setValue for cross-field clearing
-    };
-
-    // Handler for URL input change
-    const handleUrlUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        // 1. Clear file, set URL
-        setValue("image", null, { shouldValidate: true });
-        setValue("imageUrl", value, { shouldValidate: true });
-    };
-
-    return (
-        <div className="flex flex-col space-y-2 border p-3 rounded-md">
-            <Label className="text-sm font-medium">Concert Image (Optional)</Label>
-            <p className="text-xs text-gray-500">Upload a file (Max 5MB) OR paste a URL. Selecting a file clears the URL.</p>
-
-            {/* 1️⃣ File Upload */}
-            <input
-                type="file"
-                accept="image/*"
-                {...register("image")}
-                onChange={handleFileUpload}
-                className={`border p-2 rounded ${error ? "border-red-500" : ""}`}
-            />
-
-            {/* 2️⃣ URL Input */}
-            <Input
-                type="text"
-                placeholder="Enter image URL..."
-                {...register("imageUrl")}
-                value={imageUrl || ""}
-                onChange={handleUrlUpdate}
-                className={`border p-2 rounded ${error ? "border-red-500" : ""}`}
-            />
-
-            {/* Preview Section */}
-            {imagePreview && (
-                <div className="flex flex-col mt-3">
-                    <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="h-40 w-full rounded-md object-cover border"
-                    />
-
-                    <Button
-                        type="button"
-                        onClick={removeImage}
-                        variant="destructive"
-                        className="mt-2 text-sm self-start"
-                    >
-                        Remove Image
-                    </Button>
-                </div>
-            )}
-            {error && <p className="text-xs text-red-500">{error}</p>}
-        </div>
-    );
-}
-
-function PublishedSwitch({ control }: { control: any }) {
-    return (
-        <Controller
-            name="isPublished"
-            control={control}
-            render={({ field }) => (
-                <div className="mt-10 flex items-center justify-between pt-2">
-                    <Label className="text-sm font-medium">Published (Visible to users)</Label>
-                    <Switch
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                    />
-                </div>
-            )}
-        />
     );
 }

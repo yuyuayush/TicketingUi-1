@@ -38,6 +38,9 @@ export default function ConcertAdminPage() {
     };
 
     const handleSave = async (formData) => {
+        console.log("Saving form data:", formData);
+
+        // Required fields
         if (!formData.title || !formData.artist || !formData.theaterId || !formData.startTime || !formData.endTime) {
             toast({
                 variant: "destructive",
@@ -47,10 +50,7 @@ export default function ConcertAdminPage() {
             return;
         }
 
-        // Check if image file is provided
-        const hasImageFile = formData.image instanceof File;
-
-        // Prepare base payload
+        // FINAL JSON PAYLOAD
         const payload: any = {
             title: formData.title,
             artist: formData.artist,
@@ -62,41 +62,23 @@ export default function ConcertAdminPage() {
             isPublished: formData.isPublished ?? false,
             startTime: new Date(formData.startTime).toISOString(),
             endTime: new Date(formData.endTime).toISOString(),
+            image: formData.image || null, // Base64 string (or existing URL)
         };
 
-        // Only include imageUrl if no file is uploaded
-        if (!hasImageFile && formData.imageUrl) {
-            payload.imageUrl = formData.imageUrl;
-        }
-
-        let finalPayload: any = payload;
-
-        // If image file exists, use FormData
-        if (hasImageFile) {
-            const formDataPayload = new FormData();
-            
-            // Append all text fields
-            Object.entries(payload).forEach(([key, value]) => {
-                if (value !== null && value !== undefined) {
-                    if (typeof value === 'boolean') {
-                        formDataPayload.append(key, value.toString());
-                    } else {
-                        formDataPayload.append(key, String(value));
-                    }
-                }
-            });
-            
-            // Append image file with correct field name
-            formDataPayload.append("image", formData.image);
-            finalPayload = formDataPayload;
-        }
-
+        // --- EDIT ---
         if (editConcert) {
-            updateConcert.mutate({ id: editConcert._id, data: finalPayload }, { onSuccess: closeEditDialog });
-        } else {
-            createConcert.mutate(finalPayload, { onSuccess: closeEditDialog });
+            updateConcert.mutate(
+                { id: editConcert._id, data: payload },
+                { onSuccess: closeEditDialog }
+            );
+            return;
         }
+
+        // --- CREATE ---
+        createConcert.mutate(payload, { onSuccess: closeEditDialog });
     };
+
+
 
     const isPending = createConcert.isPending || updateConcert.isPending;
 

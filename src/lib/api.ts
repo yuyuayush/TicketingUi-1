@@ -59,7 +59,6 @@ const apiRequest = async <T = any>(
         ...options,
         headers: {
             ...options.headers,
-            // Only set JSON header if not blob
             ...(options.responseType !== "blob" && {
                 "Content-Type": "application/json",
             }),
@@ -328,63 +327,62 @@ export const showsApi = {
 };
 
 //  movie APi
-export const concertApi = {
-    //  Get all concerts (public)
-    async getAll(params: Record<string, any> = {}): Promise<ApiResponse> {
-        const queryParams = new URLSearchParams();
+// export const concertApi = {
+//     //  Get all concerts (public)
+//     async getAll(params: Record<string, any> = {}): Promise<ApiResponse> {
+//         const queryParams = new URLSearchParams();
 
-        Object.keys(params).forEach((key) => {
-            if (params[key] !== undefined && params[key] !== null) {
-                queryParams.append(key, params[key].toString());
-            }
-        });
+//         Object.keys(params).forEach((key) => {
+//             if (params[key] !== undefined && params[key] !== null) {
+//                 queryParams.append(key, params[key].toString());
+//             }
+//         });
 
-        return await apiRequest<ApiResponse>(`/movies?${queryParams}`);
-    },
+//         return await apiRequest<ApiResponse>(`/movies?${queryParams}`);
+//     },
 
-    //  Get concert by ID (public)
-    async getById(id: string): Promise<ApiResponse> {
-        return await apiRequest<ApiResponse>(`/movies/${id}`);
-    },
+//     //  Get concert by ID (public)
+//     async getById(id: string): Promise<ApiResponse> {
+//         return await apiRequest<ApiResponse>(`/movies/${id}`);
+//     },
 
-    //  Create new concert (admin only)
-    async create(concertData: Record<string, any>): Promise<ApiResponse> {
-        const token = getToken();
+//     //  Create new concert (admin only)
+//     async create(concertData: Record<string, any>): Promise<ApiResponse> {
+//         const token = getToken();
 
-        return await apiRequest<ApiResponse>("/movies", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(concertData),
-        });
-    },
+//         return await apiRequest<ApiResponse>("/movies", {
+//             method: "POST",
+//             headers: {
+//                 Authorization: `Bearer ${token}`,
+//                 "Content-Type": "application/json",
+//             },
+//             body: JSON.stringify(concertData),
+//         });
+//     },
 
-    //  Update concert details (admin only)
-    async update(id: string, updateData: Record<string, any>): Promise<ApiResponse> {
-        const token = getToken();
+//     //  Update concert details (admin only)
+//     async update(id: string, updateData: Record<string, any>): Promise<ApiResponse> {
+//         const token = getToken();
 
-        return await apiRequest<ApiResponse>(`/movies/${id}`, {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(updateData),
-        });
-    },
+//         return await apiRequest<ApiResponse>(`/movies/${id}`, {
+//             method: "PUT",
+//             headers: {
+//                 "Content-Type": "multipart/form-data",
+//             },
+//             body: JSON.stringify(updateData),
+//         });
+//     },
 
-    //  Delete concert (admin only)
-    async delete(id: string): Promise<ApiResponse> {
-        const token = getToken();
+//     //  Delete concert (admin only)
+//     async delete(id: string): Promise<ApiResponse> {
+//         const token = getToken();
 
-        return await apiRequest<ApiResponse>(`/movies/${id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-        });
-    },
-};
+//         return await apiRequest<ApiResponse>(`/movies/${id}`, {
+//             method: "DELETE",
+//             headers: { Authorization: `Bearer ${token}` },
+//         });
+//     },
+// };
 
 
 export const concertsApi = {
@@ -409,13 +407,12 @@ export const concertsApi = {
     // 3. Create new concert (Admin Only)
     async create(concertData: IConcertData | FormData): Promise<ApiResponse> {
         const token = getToken();
-
         const isFormData = concertData instanceof FormData;
 
         // If it's FormData (contains files), don't set Content-Type manually
         const headers: Record<string, string> = {
             Authorization: `Bearer ${token}`,
-            ...(isFormData ? {} : { "Content-Type": "application/json" }),
+            ...(isFormData ? { "content-Type": "multipart/form-data" } : { "Content-Type": "application/json" }),
         };
 
         return await apiRequest<ApiResponse>("/concert", {
@@ -429,20 +426,17 @@ export const concertsApi = {
 
 
     // 4. Update concert (Admin Only)
-    async update(id: string, updateData: Partial<IConcertData> | FormData): Promise<ApiResponse> {
-        const token = getToken();
-
-        const isFormData = updateData instanceof FormData;
-
+    async update(id: string, updateData: Partial<IConcertData>): Promise<ApiResponse> {
         return await apiRequest<ApiResponse>(`/concert/${id}`, {
             method: "PUT",
             headers: {
-                Authorization: `Bearer ${token}`,
-                ...(isFormData ? {} : { "Content-Type": "application/json" }),
+                "Content-Type": "application/json",
             },
-            body: isFormData ? updateData : JSON.stringify(updateData),
+            body: JSON.stringify(updateData),
         });
-    },
+    }
+    ,
+
 
     // 5. Delete concert (Admin Only)
     async delete(id: string): Promise<ApiResponse> {
